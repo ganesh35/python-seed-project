@@ -2,15 +2,14 @@
 
 set -e
 
-#!/bin/bash
-
 print_usage() {
-  echo "Usage: $0 -n <project_name> [-f] [-g] [-t <target_dir>] [--docker]"
+  echo "Usage: $0 -n <project_name> [-f] [-g] [-t <target_dir>] [--docker] [--ci]"
   echo "  -n, --name         Project name (required)"
   echo "  -f, --force        Overwrite existing project folder"
   echo "  -g, --git          Initialize Git (or set ALLOW_GIT_COMMANDS=true)"
   echo "  -t, --target-dir   Directory to create the project in (default: current folder)"
-  echo "  -d, --docker           Add Dockerfile for packaging-based containerization"
+  echo "  -d, --docker       Add Dockerfile for packaging-based containerization"
+  echo "  -ci, --ci          Create necessary CI scripts"
   exit 1
 }
 
@@ -213,11 +212,55 @@ initialize_git() {
   fi
 }
 
+generate_github_actions_ci() {
+  mkdir -p .github/workflows
+  cat > .github/workflows/python-ci.yml << EOF
+name: Python CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install -r requirements.txt
+
+    - name: Lint with black
+      run: |
+        source .venv/bin/activate
+        black --check .
+
+    - name: Run tests
+      run: |
+        source .venv/bin/activate
+        pytest
+EOF
+}
+
+# ---------------------------
+# ARGUMENT PARSING
+# ---------------------------
 PROJECT_NAME=""
 TARGET_DIR="."
 FORCE=false
 ALLOW_GIT_COMMANDS=false
 INCLUDE_DOCKER=false
+ENABLE_CI=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -236,6 +279,10 @@ while [[ $# -gt 0 ]]; do
     -t|--target-dir)
       TARGET_DIR="$2"
       shift 2
+      ;;
+    -ci|--ci)
+      ENABLE_CI=true
+      shift
       ;;
     -d|--docker)
       INCLUDE_DOCKER=true
@@ -269,6 +316,10 @@ generate_files
 
 if [ "$INCLUDE_DOCKER" = true ]; then
   generate_docker_files
+fi
+
+if [ "$ENABLE_CI" = true ]; then
+  generate_github_actions_ci
 fi
 
 setup_virtualenv
