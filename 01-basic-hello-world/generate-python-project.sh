@@ -1,15 +1,16 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 
 print_usage() {
-  echo "Usage: $0 -n <project_name> [-f] [-g] [-t <target_dir>] [--docker] [--ci]"
+  echo "Usage: $0 -n <project_name> [-f] [-g] [-t <target_dir>] [--docker] [--ci] [--cd]"
   echo "  -n, --name         Project name (required)"
   echo "  -f, --force        Overwrite existing project folder"
   echo "  -g, --git          Initialize Git (or set ALLOW_GIT_COMMANDS=true)"
   echo "  -t, --target-dir   Directory to create the project in (default: current folder)"
   echo "  -d, --docker       Add Dockerfile for packaging-based containerization"
   echo "  -ci, --ci          Create necessary CI scripts"
+  echo "  -cd, --cd          Create necessary CD scripts (deployment via GitHub Actions)"
   exit 1
 }
 
@@ -49,10 +50,10 @@ __pycache__/
 *.egg-info/
 .vscode/
 .git/
-tests/
 EOF
 
   cat > setup.py << EOF
+import os
 from setuptools import setup, find_packages
 
 setup(
@@ -64,7 +65,7 @@ setup(
     author="Your Name",
     author_email="your.email@example.com",
     description="A basic Python project",
-    long_description=open('README.md').read(),
+    long_description=(open("README.md").read() if os.path.exists("README.md") else ""),
     long_description_content_type='text/markdown',
     url="https://github.com/yourusername/$PROJECT_NAME",
     classifiers=[
@@ -97,7 +98,7 @@ EOF
 
 \`\`\`bash
 python3 -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+source .venv/bin/activate  # or .venv\\Scripts\\activate on Windows
 \`\`\`
 
 ### 2. Install dependencies
@@ -156,7 +157,6 @@ __pycache__/
 .venv/
 .vscode/
 .git/
-tests/
 EOF
 }
 
@@ -167,17 +167,20 @@ setup_virtualenv() {
     exit 1
   }
 
-  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    PYTHON_EXEC=".venv/Scripts/python.exe"
-    PIP_EXEC=".venv/Scripts/pip.exe"
-    PYTEST_EXEC=".venv/Scripts/pytest.exe"
-    BLACK_EXEC=".venv/Scripts/black.exe"
-  else
-    PYTHON_EXEC=".venv/bin/python"
-    PIP_EXEC=".venv/bin/pip"
-    PYTEST_EXEC=".venv/bin/pytest"
-    BLACK_EXEC=".venv/bin/black"
-  fi
+  case "$OSTYPE" in
+    msys*|cygwin*|win32*)
+      PYTHON_EXEC=".venv/Scripts/python.exe"
+      PIP_EXEC=".venv/Scripts/pip.exe"
+      PYTEST_EXEC=".venv/Scripts/pytest.exe"
+      BLACK_EXEC=".venv/Scripts/black.exe"
+      ;;
+    *)
+      PYTHON_EXEC=".venv/bin/python"
+      PIP_EXEC=".venv/bin/pip"
+      PYTEST_EXEC=".venv/bin/pytest"
+      BLACK_EXEC=".venv/bin/black"
+      ;;
+  esac
 
   echo "📦 Installing dependencies..."
   "$PYTHON_EXEC" -m pip install --upgrade pip setuptools
@@ -214,6 +217,43 @@ initialize_git() {
 
 generate_github_actions_ci() {
   mkdir -p .github/workflows
+  cat > .github/workflows/python-ci-reusable.yml << EOF
+name: Python CI Reusable
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: '3.11'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: \${{ inputs.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with black
+      run: black --check .
+
+    - name: Run tests with pytest
+      run: pytest
+EOF
+
   cat > .github/workflows/python-ci.yml << EOF
 name: Python CI
 
@@ -224,31 +264,154 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  call-python-ci:
+    uses: ./.github/workflows/python-ci-reusable.yml
+    with:
+      python-version: '3.11'
+EOF
+}
+
+generate_github_actions_cd() {
+  mkdir -p .github/workflows
+  cat > .github/workflows/python-cd-reusable.yml << EOF
+name: Build & Push Docker Image with Python Wheel
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: false
+        type: string
+      namespace:
+        required: false
+        type: string
+        default: /com/gc
+      artifactory_repository:
+        required: false
+        type: string
+      artifactory_url:
+        required: false
+        type: string
+        default: https://my-artifactory/artifactory
+    secrets:
+      ARTIFACTORY_USERNAME:
+        required: false
+      ARTIFACTORY_PASSWORD:
+        required: false
+      ARTIFACTORY_PUBLIC_USERNAME:
+        required: false
+      ARTIFACTORY_PUBLIC_PASSWORD:
+        required: false
+
+jobs:
+  deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
+    - name: Install Python build tools
       run: |
-        python -m venv .venv
-        source .venv/bin/activate
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip
+        pip install build
 
-    - name: Lint with black
-      run: |
-        source .venv/bin/activate
-        black --check .
+    - name: Build Python wheel
+      run: python -m build --wheel
 
-    - name: Run tests
+    - name: Determine image tag
+      id: get_tag
       run: |
-        source .venv/bin/activate
-        pytest
+        if [[ "\${GITHUB_REF##*/}" == "main" ]]; then
+          echo "tag=\${GITHUB_SHA}" >> \$GITHUB_OUTPUT
+        else
+          version=\$(python setup.py --version)
+          echo "tag=\$version" >> \$GITHUB_OUTPUT
+        fi
+
+    - name: Resolve image values
+      id: resolve
+      run: |
+        REPO="\${{ inputs.artifactory_repository }}"
+        if [[ -z "\$REPO" ]]; then
+          if [[ "\${GITHUB_REF##*/}" == "main" ]]; then
+            REPO=dkr-public-local
+          else
+            REPO=dkr-snapshot-local
+          fi
+        fi
+        echo "repo=\$REPO" >> \$GITHUB_OUTPUT
+        NS="\${{ inputs.namespace }}"
+        echo "ns=\${NS%/}/" >> \$GITHUB_OUTPUT
+        NAME="\${{ inputs.image_name }}"
+        if [[ -z "\$NAME" ]]; then
+          NAME="\${GITHUB_REPOSITORY##*/}"
+        fi
+        echo "name=\$NAME" >> \$GITHUB_OUTPUT
+
+    - name: Set credentials based on repository
+      id: creds
+      run: |
+        if [[ "\${{ steps.resolve.outputs.repo }}" == "dkr-public-local" ]]; then
+          echo "user=\${{ secrets.ARTIFACTORY_PUBLIC_USERNAME }}" >> \$GITHUB_OUTPUT
+          echo "pass=\${{ secrets.ARTIFACTORY_PUBLIC_PASSWORD }}" >> \$GITHUB_OUTPUT
+        else
+          echo "user=\${{ secrets.ARTIFACTORY_USERNAME }}" >> \$GITHUB_OUTPUT
+          echo "pass=\${{ secrets.ARTIFACTORY_PASSWORD }}" >> \$GITHUB_OUTPUT
+        fi
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Artifactory Docker Registry
+      run: echo "\${{ steps.creds.outputs.pass }}" | docker login "\${{ inputs.artifactory_url }}" -u "\${{ steps.creds.outputs.user }}" --password-stdin
+
+    - name: Build Docker image with wheel installed
+      run: |
+        cp dist/*.whl .
+        docker build -t "\${{ inputs.artifactory_url }}/\${{ steps.resolve.outputs.repo }}\${{ steps.resolve.outputs.ns }}\${{ steps.resolve.outputs.name }}:\${{ steps.get_tag.outputs.tag }}" .
+
+    - name: Push Docker image
+      run: |
+        docker push "\${{ inputs.artifactory_url }}/\${{ steps.resolve.outputs.repo }}\${{ steps.resolve.outputs.ns }}\${{ steps.resolve.outputs.name }}:\${{ steps.get_tag.outputs.tag }}"
+
+    - name: Also tag and push as 'latest' (only on main)
+      if: github.ref_name == 'main'
+      run: |
+        docker tag "\${{ inputs.artifactory_url }}/\${{ steps.resolve.outputs.repo }}\${{ steps.resolve.outputs.ns }}\${{ steps.resolve.outputs.name }}:\${{ steps.get_tag.outputs.tag }}" "\${{ inputs.artifactory_url }}/\${{ steps.resolve.outputs.repo }}\${{ steps.resolve.outputs.ns }}\${{ steps.resolve.outputs.name }}:latest"
+        docker push "\${{ inputs.artifactory_url }}/\${{ steps.resolve.outputs.repo }}\${{ steps.resolve.outputs.ns }}\${{ steps.resolve.outputs.name }}:latest"
+
+    - name: Logout from Docker Registry
+      run: docker logout "\${{ inputs.artifactory_url }}"
+EOF
+
+  cat > .github/workflows/python-cd.yml << EOF
+name: Deploy via Reusable Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  call-deploy:
+    uses: ./.github/workflows/python-cd-reusable.yml@main
+    with:
+      image_name: ${PROJECT_NAME}
+      namespace: /team-x
+      artifactory_repository: dkr-snapshot-local
+    secrets:
+      ARTIFACTORY_USERNAME: \${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: \${{ secrets.ARTIFACTORY_PASSWORD }}
+      ARTIFACTORY_PUBLIC_USERNAME: \${{ secrets.ARTIFACTORY_PUBLIC_USERNAME }}
+      ARTIFACTORY_PUBLIC_PASSWORD: \${{ secrets.ARTIFACTORY_PUBLIC_PASSWORD }}
 EOF
 }
 
@@ -261,6 +424,7 @@ FORCE=false
 ALLOW_GIT_COMMANDS=false
 INCLUDE_DOCKER=false
 ENABLE_CI=false
+ENABLE_CD=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -279,6 +443,10 @@ while [[ $# -gt 0 ]]; do
     -t|--target-dir)
       TARGET_DIR="$2"
       shift 2
+      ;;
+    -cd|--cd)
+      ENABLE_CD=true
+      shift
       ;;
     -ci|--ci)
       ENABLE_CI=true
@@ -320,6 +488,10 @@ fi
 
 if [ "$ENABLE_CI" = true ]; then
   generate_github_actions_ci
+fi
+
+if [ "$ENABLE_CD" = true ]; then
+  generate_github_actions_cd
 fi
 
 setup_virtualenv

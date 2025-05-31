@@ -1,46 +1,60 @@
-# generate-python-project.sh
+# Python Project Generator
 
-A powerful and flexible Bash script to scaffold Python projects with optional Git, Docker, and GitHub Actions CI setup.
-
----
-
-## 🚀 Features
-
-- 📁 Creates a modern Python project layout with:
-  - `src/` and `tests/` structure
-  - `setup.py` for packaging
-  - `.vscode/settings.json` for editor formatting
-- 🧪 Sets up virtual environment, installs `black`, `pytest`
-- 🐳 Optionally creates a Dockerfile with clean multi-stage packaging (no raw source)
-- 🧬 Optionally adds GitHub Actions CI workflow
-- 🧰 Git initialization with optional flag or `ALLOW_GIT_COMMANDS=true`
-- 🧼 Auto format & test run after creation
+This project scaffolds a fully-configured Python application with optional Docker, Git, and GitHub Actions CI/CD support.
 
 ---
 
-## 🧑‍💻 Usage
+## 🧰 Features
+
+- Python project structure with `src/` and `tests/`
+- `pytest` for testing
+- `black` for code formatting
+- Preconfigured `.vscode/settings.json`
+- Optional:
+  - `Dockerfile` and `.dockerignore`
+  - Git initialization with first commit
+  - GitHub Actions CI/CD pipelines
+- Auto setup of virtual environment and runs:
+  - the app
+  - tests
+  - formatting
+
+---
+
+## 🚀 Usage
+
+### 🛠 Prerequisites
+
+- Bash shell (Linux/macOS or Git Bash on Windows)
+- Python 3.7+
+- `pip`, `venv`, `git` (optional), `docker` (optional)
+
+---
+
+### 📦 Run the Script
 
 ```bash
-./generate-python-project.sh -n <project_name> [options]
+./generate.sh -n my_project [options]
 ```
 
-### Options
+### 🔧 Options
 
-| Option             | Description                                                                 |
-|--------------------|-----------------------------------------------------------------------------|
-| `-n`, `--name`      | **(Required)** Name of the Python project                                  |
-| `-f`, `--force`     | Overwrite existing project folder if it exists                             |
-| `-g`, `--git`       | Initialize Git repository (or set `ALLOW_GIT_COMMANDS=true`)               |
-| `-t`, `--target-dir`| Target directory to create project (default: current directory)            |
-| `-d`, `--docker`    | Include a Dockerfile and `.dockerignore` for packaging-based containerization |
-| `-ci`, `--ci`       | Add GitHub Actions CI workflow in `.github/workflows/python-ci.yml`       |
+| Option       | Description                                              |
+|--------------|----------------------------------------------------------|
+| `-n`         | **Project name** (required)                              |
+| `-f`         | Force overwrite if project folder already exists         |
+| `-g`         | Initialize a Git repo (or set `ALLOW_GIT_COMMANDS=true`) |
+| `-t`         | Target directory (default: current directory)            |
+| `-d`         | Include Dockerfile and `.dockerignore`                  |
+| `-ci`        | Add GitHub Actions CI pipelines                         |
+| `-cd`        | Add GitHub Actions CD workflows for Docker builds       |
 
 ---
 
-## 🐍 Project Structure
+## 🧪 Generated Project Structure
 
 ```
-<project_name>/
+my_project/
 ├── src/
 │   └── main.py
 ├── tests/
@@ -49,68 +63,92 @@ A powerful and flexible Bash script to scaffold Python projects with optional Gi
 │   └── settings.json
 ├── .gitignore
 ├── README.md
-├── requirements.txt
 ├── setup.py
-├── Dockerfile* (if --docker is set)
-└── .github/workflows/python-ci.yml* (if --ci is set)
+├── requirements.txt
+├── Dockerfile (optional)
+├── .dockerignore (optional)
+└── .github/
+    └── workflows/
+        ├── python-ci.yml (optional)
+        ├── python-ci-reusable.yml (optional)
+        ├── python-cd.yml (optional)
+        └── python-cd-reusable.yml (optional)
 ```
 
 ---
 
-## 📦 Run Your Project
+## 🧰 Development Guide
+
+### 🔁 Create a Virtual Environment
 
 ```bash
-# 1. Navigate to project
-cd <project_name>
-
-# 2. Create virtualenv
 python3 -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+```
 
-# 3. Install requirements
+### 📥 Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 4. Run your app
+### ▶️ Run App
+
+```bash
 python src/main.py
+```
 
-# 5. Run tests
+### 🧪 Run Tests
+
+```bash
 pytest
+```
 
-# 6. Format code
+### 🎨 Format Code
+
+```bash
 black .
 ```
 
 ---
 
-## 🛠 Requirements
+## 🐳 Docker (Optional)
 
-- Bash (Linux, macOS, or Git Bash on Windows)
-- Python 3.7+
-- `pip`, `virtualenv`
-- (Optional) Docker and Git
-
----
-
-## 🧪 GitHub Actions CI
-
-If `--ci` is used, a GitHub Actions workflow is created to:
-- Set up Python
-- Install dependencies
-- Run `black --check`
-- Run tests via `pytest`
-
----
-
-## ✅ Example
+Build & run using the generated `Dockerfile`:
 
 ```bash
-./generate-python-project.sh -n myapp --git --docker --ci
+docker build -t my_project .
+docker run my_project
 ```
-
-This will create a Git-enabled Python project with Docker support and CI.
 
 ---
 
-## 📘 License
+## 🔄 CI/CD with GitHub Actions (Optional)
 
-MIT — use it freely and adapt for your needs.
+If `--ci` and/or `--cd` flags are passed, GitHub workflows will be added to `.github/workflows`.
+
+### Example CI Trigger
+
+```yaml
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+```
+
+### Example CD Trigger
+
+```yaml
+on:
+  push:
+    branches: [ main, dev ]
+```
+
+Make sure you configure the necessary [GitHub Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) for Artifactory if CD is enabled.
+
+---
+
+## 📄 License
+
+MIT License – feel free to use and modify.
