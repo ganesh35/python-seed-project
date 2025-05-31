@@ -16,7 +16,6 @@ A modular Bash script to quickly scaffold a modern, testable, and container-read
 - 🧰 Git initialization (optional via flag or `ALLOW_GIT_COMMANDS`)
 - 💣 `--force` to overwrite existing folders
 - 📂 `--target-dir` to customize project location
-- 🧩 Modular helpers (see `lib.sh`)
 
 ---
 
