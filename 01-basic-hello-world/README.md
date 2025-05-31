@@ -94,5 +94,5 @@ pytest
 
 ## 🧑‍💻 Author
 
-Crafted with ❤️ using Bash.
+Crafted with ❤️ using Bash - GB.
 

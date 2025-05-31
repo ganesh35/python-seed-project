@@ -24,6 +24,6 @@ A modular Bash script to quickly scaffold a modern, testable, and container-read
 There are multiple options to create a seed application for any python. 
 ### 01-basic-hello-world
 This script will let you create a basic hello-world python application
-Useful to create general quick use tools for Scheduled and automation tasks.
+Ideal for bootstrapping CLI tools, internal packages, or microservices
 **More info is under:** [01-basic-hello-world](/01-basic-hello-world)
 
