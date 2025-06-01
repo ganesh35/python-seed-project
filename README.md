@@ -1,21 +1,24 @@
 # generate-python-project.sh
 
-A simple but powerful Bash script to scaffold a Python project with virtual environment, auto-formatting, testing, and optional Git support.
+A comprehensive Bash script to scaffold modern Python projects with optional Git, Docker, GitHub Actions CI/CD integration, and `.env` support.
 
 ---
 
 ## 🚀 Features
 
-- 📁 Creates a clean Python project layout:
-  - `src/<module_name>/` structure
-  - `tests/` with an initial test
-  - `setup.py` for packaging
-  - `.vscode/settings.json` for editor formatting
-  - `.gitignore` and `README.md`
-- 🧪 Sets up a virtual environment and installs `black`, `pytest`
-- 🎨 Automatically formats code and runs tests
-- 🧰 Initializes Git (optional)
-- 🧼 Supports project names with hyphens (e.g. `hello-py` → `hello_py` for module)
+- 📁 Creates a clean Python project structure with:
+  - `src/` (with `main.py`, `config.py`, and `__init__.py`)
+  - `tests/` with example test
+  - `config/.env` and `env.sample` support
+  - `setup.py` configured for console entry points
+  - `.vscode/settings.json` for dev setup
+- 🧪 Sets up `pytest`, `black`, `python-dotenv`
+- 🔧 Initializes a virtual environment and installs dependencies
+- 🐳 Optionally generates a Dockerfile and `.dockerignore`
+- ⚙️ Adds CI and CD GitHub Actions workflows if desired
+- 🧰 Git initialization (optional or via `ALLOW_GIT_COMMANDS=true`)
+- 🧼 Auto runs and formats code after setup
+- 🧽 Automatically converts project names like `hello-py` → `hello_py` for module-safe naming
 
 ---
 
@@ -27,24 +30,32 @@ A simple but powerful Bash script to scaffold a Python project with virtual envi
 
 ### Options
 
-| Option             | Description                                                  |
-|--------------------|--------------------------------------------------------------|
-| `-n`, `--name`      | **(Required)** Name of the Python project                   |
-| `-f`, `--force`     | Overwrite existing project folder if it exists              |
-| `-g`, `--git`       | Initialize a Git repository (or set `ALLOW_GIT_COMMANDS=true`) |
-| `-t`, `--target-dir`| Directory to create the project in (default: current folder) |
+| Option              | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `-n`, `--name`       | **(Required)** Name of the Python project                                  |
+| `-f`, `--force`      | Overwrite existing project folder                                           |
+| `-g`, `--git`        | Initialize Git (or set `ALLOW_GIT_COMMANDS=true`)                          |
+| `-t`, `--target-dir` | Target directory to create the project (default: current directory)        |
+| `-d`, `--docker`     | Include Dockerfile and `.dockerignore`                                     |
+| `-ci`, `--ci`        | Add GitHub Actions CI workflow                                             |
+| `-cd`, `--cd`        | Add GitHub Actions CD workflow (build/push Docker image)                   |
 
 ---
 
-## 🐍 Project Structure
+## 📂 Project Structure
 
 ```
 <project_name>/
 ├── src/
-│   └── <module_name>/       # Hyphens in name become underscores
-│       └── main.py
+│   └── <module_name>/
+│       ├── __init__.py
+│       ├── main.py
+│       └── config.py
 ├── tests/
 │   └── test_main.py
+├── config/
+│   ├── .env
+│   └── env.sample
 ├── .vscode/
 │   └── settings.json
 ├── .gitignore
@@ -52,51 +63,74 @@ A simple but powerful Bash script to scaffold a Python project with virtual envi
 ├── requirements.txt
 ├── setup.py
 ├── pytest.ini
-└── .venv/
+├── Dockerfile* (if --docker is set)
+└── .github/
+    └── workflows/
+        ├── python-ci.yml* (if --ci is set)
+        ├── python-ci-reusable.yml* (if --ci is set)
+        ├── python-cd.yml* (if --cd is set)
+        └── python-cd-reusable.yml* (if --cd is set)
 ```
 
 ---
 
-## 📦 Run Your Project
+## 🐍 How to Run
+
+### 1. Create virtual environment
 
 ```bash
-# 1. Navigate to project
-cd <project_name>
+python3 -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+```
 
-# 2. Create and activate virtualenv (already done by the script)
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+### 2. Install dependencies
 
-# 3. Run the application
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Run the application
+
+```bash
 PYTHONPATH=src python -m <module_name>.main
+```
 
-# 4. Run tests
+### 4. Run tests
+
+```bash
 PYTHONPATH=src pytest
+```
 
-# 5. Format code
+### 5. Format code
+
+```bash
 black .
 ```
 
 ---
 
-## 🛠 Requirements
+## 📦 GitHub Actions CI/CD
 
-- Bash (Linux, macOS, or Git Bash on Windows)
-- Python 3.7+
-- `pip`, `virtualenv`
-- (Optional) Git
+- **CI (`--ci`)**:
+  - Checks code formatting with `black`
+  - Runs `pytest` tests
+- **CD (`--cd`)**:
+  - Builds Python wheel
+  - Builds Docker image with installed wheel
+  - Pushes image to Artifactory (supporting secrets for auth)
 
 ---
 
 ## ✅ Example
 
 ```bash
-./generate-python-project.sh -n hello-py --git --force
+./generate-python-project.sh -n my-app --git --docker --ci --cd
 ```
 
-This creates a project in `hello-py/` using `hello_py` as the Python module.
+This will create a full-featured Python project with Git, Docker, CI, and CD support.
 
 ---
 
 ## 📘 License
 
-MIT — use it freely and adapt as needed.
+MIT — free to use, modify, and distribute.

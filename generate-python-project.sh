@@ -14,6 +14,14 @@ print_usage() {
   exit 1
 }
 
+# ---------------------------
+# PYTHON VERSION CHECK
+# ---------------------------
+MIN_PYTHON=3.7
+PYTHON_VERSION=$(
+  python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))' 2>/dev/null ||   python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))' 2>/dev/null
+)
+
 create_structure() {
   echo "📁 Creating directory structure..."
   mkdir -p "$TARGET_DIR/$PROJECT_NAME/src/$MODULE_NAME" "$TARGET_DIR/$PROJECT_NAME/tests" "$TARGET_DIR/$PROJECT_NAME/.vscode"
@@ -23,12 +31,30 @@ create_structure() {
 
 generate_files() {
   cat > "src/$MODULE_NAME/main.py" << EOF
+from $MODULE_NAME import config
 def main():
-    print("Hello World!")
-    return "Hello World!"
+    print(f"Hello {config.HELLO_MESSAGE}")
+    return "Hello " + config.HELLO_MESSAGE
 
 if __name__ == "__main__":
     main()
+EOF
+cat > "src/$MODULE_NAME/config.py" << EOF
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Resolve path to config/.env from project root
+env_path = Path(__file__).resolve().parents[2] / "config" / ".env"
+
+print(f"🔍 Looking for .env at: {env_path}")
+if not env_path.exists():
+    print("❌ .env file not found!")
+else:
+    print("✅ .env file found")
+
+load_dotenv(dotenv_path=env_path)
+HELLO_MESSAGE = os.getenv("HELLO_MESSAGE", "All!")
 EOF
 
 cat > tests/test_main.py << EOF
@@ -41,6 +67,7 @@ EOF
   cat > requirements.txt << EOF
 pytest
 black
+python-dotenv
 EOF
 
   cat > .gitignore << EOF
@@ -89,6 +116,17 @@ EOF
   "python.testing.pytestArgs": ["tests"]
 }
 EOF
+
+  mkdir -p config
+  cat > config/.env << EOF
+HELLO_MESSAGE=World!
+EOF
+
+  cat > config/env.sample << EOF
+# Rename this to .env
+HELLO_MESSAGE=World!
+EOF
+
   cat > pytest.ini << EOF
 [pytest]
 pythonpath = src
@@ -505,5 +543,6 @@ fi
 setup_virtualenv
 initialize_git
 
+echo "🐍 Python version $PYTHON_VERSION detected – OK."
 echo "✅ Project '$PROJECT_NAME' created successfully in '$TARGET_DIR'."
 echo "📘 See '$TARGET_DIR/$PROJECT_NAME/README.md' for usage."
