@@ -15,13 +15,14 @@ print_usage() {
 }
 
 create_structure() {
-  mkdir -p "$TARGET_DIR/$PROJECT_NAME"/{tests,src,.vscode}
+  echo "📁 Creating directory structure..."
+  mkdir -p "$TARGET_DIR/$PROJECT_NAME/src/$MODULE_NAME" "$TARGET_DIR/$PROJECT_NAME/tests" "$TARGET_DIR/$PROJECT_NAME/.vscode"
   cd "$TARGET_DIR/$PROJECT_NAME" || exit 1
-  touch src/__init__.py tests/__init__.py
+  touch "src/$MODULE_NAME/__init__.py" "tests/__init__.py"
 }
 
 generate_files() {
-  cat > src/main.py << EOF
+  cat > "src/$MODULE_NAME/main.py" << EOF
 def main():
     print("Hello World!")
     return "Hello World!"
@@ -30,8 +31,8 @@ if __name__ == "__main__":
     main()
 EOF
 
-  cat > tests/test_main.py << EOF
-from src import main
+cat > tests/test_main.py << EOF
+from $MODULE_NAME import main
 
 def test_main_output():
     assert main.main() == "Hello World!"
@@ -73,8 +74,8 @@ setup(
         "License :: OSI Approved :: MIT License"
     ],
     entry_points={
-        'console_scripts': [
-            '$PROJECT_NAME=main:main',
+        'console_scripts': [            
+          '$PROJECT_NAME=$MODULE_NAME.main:main',
         ],
     },
 )
@@ -88,7 +89,10 @@ EOF
   "python.testing.pytestArgs": ["tests"]
 }
 EOF
-
+  cat > pytest.ini << EOF
+[pytest]
+pythonpath = src
+EOF
   cat > README.md << EOF
 # $PROJECT_NAME
 
@@ -110,13 +114,13 @@ pip install -r requirements.txt
 ### 3. Run the application
 
 \`\`\`bash
-python src/main.py
+PYTHONPATH=src python -m $MODULE_NAME.main
 \`\`\`
 
 ### 4. Run tests
 
 \`\`\`bash
-pytest
+PYTHONPATH=src pytest
 \`\`\`
 
 ### 5. Format code
@@ -186,11 +190,11 @@ setup_virtualenv() {
   "$PYTHON_EXEC" -m pip install --upgrade pip setuptools
   "$PIP_EXEC" install -r requirements.txt
 
-  echo "🚀 Running main.py..."
-  "$PYTHON_EXEC" src/main.py
+  echo "🚀 Running app..."
+  PYTHONPATH=src "$PYTHON_EXEC" -m "$MODULE_NAME.main"
 
   echo "🧪 Running tests..."
-  "$PYTEST_EXEC"
+  PYTHONPATH=src "$PYTEST_EXEC"
 
   echo "🎨 Formatting code..."
   "$BLACK_EXEC" .
@@ -467,7 +471,7 @@ if [ -z "$PROJECT_NAME" ]; then
   echo "❌ Project name is required."
   print_usage
 fi
-
+MODULE_NAME=$(echo "$PROJECT_NAME" | tr '-' '_')
 if [ -d "$TARGET_DIR/$PROJECT_NAME" ]; then
   if [ "$FORCE" = true ]; then
     echo "⚠️ Removing existing project: $TARGET_DIR/$PROJECT_NAME"
@@ -478,6 +482,10 @@ if [ -d "$TARGET_DIR/$PROJECT_NAME" ]; then
   fi
 fi
 
+# ---------------------------
+# EXECUTION FLOW
+# ---------------------------
+echo "🚧 Starting project scaffolding..."
 echo "📁 Creating Python project in: $TARGET_DIR/$PROJECT_NAME"
 create_structure
 generate_files
