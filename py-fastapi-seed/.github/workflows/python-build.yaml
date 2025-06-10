@@ -1,0 +1,97 @@
+name: Python Build
+
+on:
+  workflow_call:
+    inputs:
+      application-name:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+      artifactory-url:
+        required: true
+        type: string
+    secrets:
+      ARTIFACTORY_USERNAME:
+        required: true
+      ARTIFACTORY_PASSWORD:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build --wheel
+
+      - name: Prepare wheel-only Docker context
+        run: |
+          mkdir wheel-dist
+          cp dist/*.whl wheel-dist/
+          cp Dockerfile.wheel wheel-dist/Dockerfile
+
+      - name: Log in to Artifactory Docker Registry
+        run: |
+          IMAGE_TAG="${{ inputs.image-tag }}"
+          if [[ "$IMAGE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9]+)*$ ]]; then
+            export ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_RELEASE_USERNAME }}
+            export ARTIFACTORY_PASS=${{ secrets.ARTIFACTORY_RELEASE_PASSWORD }}
+          else
+            export ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_SNAPSHOT_USERNAME }}
+            export ARTIFACTORY_PASS=${{ secrets.ARTIFACTORY_SNAPSHOT_PASSWORD }}
+          fi
+          echo $ARTIFACTORY_PASS | docker login ${{ inputs.artifactory-url }} -u $ARTIFACTORY_USER --password-stdin
+
+      - name: Check if image-tag is semver and create tag if needed
+        id: semver_tag
+        run: |
+          IMAGE_TAG="${{ inputs.image-tag }}"
+          # Simple semver regex: major.minor.patch (optionally with pre-release/build)
+          if [[ "$IMAGE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9]+)*$ ]]; then
+            echo "Image tag $IMAGE_TAG looks like a semver. Checking if tag exists..."
+            git fetch --tags
+            if git rev-parse "$IMAGE_TAG" >/dev/null 2>&1; then
+              echo "::error::Git tag $IMAGE_TAG already exists. Please use a unique version."
+              exit 1
+            else
+              git tag "$IMAGE_TAG"
+              git push origin "$IMAGE_TAG"
+              echo "Created and pushed git tag $IMAGE_TAG."
+            fi
+          else
+            echo "Image tag $IMAGE_TAG is not a semver, skipping tag creation."
+          fi
+
+      - name: Build and Push Docker Image to Artifactory
+        run: |
+          cd wheel-dist
+          cp ../../Dockerfile.wheel Dockerfile
+          if [[ "${{ inputs.image-tag }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            export REPO="dkr-public-local"
+            export ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_RELEASE_USERNAME }}
+            export ARTIFACTORY_PASS=${{ secrets.ARTIFACTORY_RELEASE_PASSWORD }}
+          else
+            export REPO="dkr-snapshot-local"
+            export ARTIFACTORY_USER=${{ secrets.ARTIFACTORY_SNAPSHOT_USERNAME }}
+            export ARTIFACTORY_PASS=${{ secrets.ARTIFACTORY_SNAPSHOT_PASSWORD }}
+          fi
+          export BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo $ARTIFACTORY_PASS | docker login ${{ inputs.artifactory-url }} -u $ARTIFACTORY_USER --password-stdin
+          docker build --build-arg GIT_COMMIT=${{ github.sha }} --build-arg BUILD_TIMESTAMP=$BUILD_TIMESTAMP -t ${{ inputs.artifactory-url }}/$REPO/${{ inputs.application-name }}:${{ inputs.image-tag }} .
+          docker push ${{ inputs.artifactory-url }}/$REPO/${{ inputs.application-name }}:${{ inputs.image-tag }}

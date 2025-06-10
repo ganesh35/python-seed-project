@@ -1,0 +1,71 @@
+name: Python CI
+
+on:
+  workflow_call:
+    inputs:
+      run-tests:
+        required: false
+        type: boolean
+        default: true
+      run-build:
+        required: false
+        type: boolean
+        default: true
+      run-lint:
+        required: false
+        type: boolean
+        default: true
+      run-sonarqube:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with black
+        if: ${{ inputs.run-lint }}
+        run: |
+          black --check .
+
+      - name: Run tests
+        if: ${{ inputs.run-tests }}
+        run: |
+          pytest
+
+      - name: Fetch secrets from GCP Secret Manager
+        if: ${{ inputs.run-sonarqube && (!secrets.SONAR_TOKEN || !secrets.SONAR_HOST_URL) }}
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |
+            SONAR_TOKEN:projects/${{ secrets.GCP_PROJECT_ID }}/secrets/SONAR_TOKEN
+            SONAR_HOST_URL:projects/${{ secrets.GCP_PROJECT_ID }}/secrets/SONAR_HOST_URL
+
+      - name: SonarQube Scan
+        if: ${{ inputs.run-sonarqube && env.SONAR_TOKEN }}
+        uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          projectBaseDir: .
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Build wheel (only on tag or release)
+        if: ${{ inputs.run-build && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          python -m pip install --upgrade build
+          python -m build --wheel

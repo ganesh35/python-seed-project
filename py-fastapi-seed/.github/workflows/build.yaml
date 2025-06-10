@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      application-name:
+        description: 'Application name for the Docker image'
+        required: true
+        default: 'fastapi-seed'
+      image-tag:
+        description: 'Image tag for the Docker image'
+        required: true
+        default: ${{ github.sha.substr(0,7) }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and push Docker image
+        uses: ./.github/workflows/python-build.yaml
+        with:
+          application-name: ${{ github.event.inputs.application-name }}
+          image-tag: ${{ github.event.inputs.image-tag }}
+          artifactory-url: my-artifactory.com/artifactory
+        secrets:
+          ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}

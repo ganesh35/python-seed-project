@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+      - bugfix/**
+      - hotfix/**
+      - chore/**
+  pull_request:
+    branches:
+      - main
+      - feature/**
+      - bugfix/**
+      - hotfix/**
+      - chore/**
+
+jobs:
+  build-and-test:
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      run-tests: true
+      run-lint: true
+      run-build: true
+      run-sonarqube: true
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

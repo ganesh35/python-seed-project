@@ -1,0 +1,90 @@
+name: Python CD
+
+description: >
+  Reusable deployment workflow for OCP4, GCP Cloud Run, or GKE.
+
+on:
+  workflow_call:
+    inputs:
+      target-platform:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+      application-name:
+        required: true
+        type: string
+      artifactory-url:
+        required: true
+        type: string
+    secrets:
+      OCP4_KUBECONFIG:
+        required: false
+      GCP_SA_KEY:
+        required: false
+      ARTIFACTORY_USERNAME:
+        required: true
+      ARTIFACTORY_PASSWORD:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker registry auth
+        run: |
+          if [[ "${{ inputs.environment }}" == "prd" ]]; then
+            USERNAME=${{ secrets.ARTIFACTORY_PRD_USERNAME }}
+            PASSWORD=${{ secrets.ARTIFACTORY_PRD_PASSWORD }}
+          elif [[ "${{ inputs.environment }}" == "uat" ]]; then
+            USERNAME=${{ secrets.ARTIFACTORY_UAT_USERNAME }}
+            PASSWORD=${{ secrets.ARTIFACTORY_UAT_PASSWORD }}
+          else
+            USERNAME=${{ secrets.ARTIFACTORY_INT_USERNAME }}
+            PASSWORD=${{ secrets.ARTIFACTORY_INT_PASSWORD }}
+          fi
+          echo $PASSWORD | docker login ${{ inputs.artifactory-url }} -u $USERNAME --password-stdin
+
+      - name: Set IMAGE variable
+        id: set_image
+        run: |
+          echo "IMAGE=${{ inputs.artifactory-url }}/dkr-public-local/${{ inputs.application-name }}:${{ inputs.image-tag }}" >> $GITHUB_ENV
+
+      - name: Deploy to OCP4
+        if: ${{ inputs.target-platform == 'ocp4' }}
+        env:
+          KUBECONFIG: ${{ secrets.OCP4_KUBECONFIG }}
+        run: |
+          echo "Deploying to OpenShift 4..."
+          # oc login and oc rollout logic here
+          # oc set image deployment/${{ inputs.application-name }} ${{ inputs.application-name }}=$IMAGE --record
+
+      - name: Deploy to GCP Cloud Run
+        if: ${{ inputs.target-platform == 'cloudrun' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          echo "Deploying to GCP Cloud Run..."
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          gcloud run deploy ${{ inputs.application-name }} \
+            --image=$IMAGE \
+            --region=us-central1 \
+            --platform=managed \
+            --allow-unauthenticated
+
+      - name: Deploy to GKE
+        if: ${{ inputs.target-platform == 'gke' }}
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          echo "Deploying to GKE..."
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          # gcloud container clusters get-credentials logic here
+          # kubectl set image deployment/${{ inputs.application-name }} ${{ inputs.application-name }}=$IMAGE --record

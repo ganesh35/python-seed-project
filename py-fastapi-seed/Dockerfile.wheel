@@ -1,0 +1,29 @@
+# Dockerfile for wheel-only deployment
+FROM python:3.12-slim
+
+ARG GIT_COMMIT="unknown"
+ENV GIT_COMMIT=${GIT_COMMIT}
+
+ARG BUILD_TIMESTAMP="unknown"
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+
+WORKDIR /app
+
+# Copy only the wheel file
+COPY *.whl ./
+
+# Install the wheel
+RUN pip install --no-cache-dir ./*.whl
+
+# Optionally, clean up the wheel file
+RUN rm ./*.whl
+
+# Set environment variables (customize as needed)
+ARG PORT=8080
+ENV PORT=${PORT}
+
+# Expose the port
+EXPOSE ${PORT}
+
+# Start the FastAPI app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${PORT}"]

@@ -1,0 +1,40 @@
+name: CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment (prd, uat, int)'
+        required: true
+        default: 'prd'  # Default to production, can be overridden in the workflow dispatch UI
+      image-tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        default: ${{ github.sha.substr(0,7) }}
+      application-name:
+        description: 'Application name for deployment'
+        required: true
+        default: 'fastapi-seed'
+      artifactory-url:
+        description: 'Artifactory Docker registry URL'
+        required: true
+        default: 'my-artifactory.com/artifactory'
+      target-platform:
+        description: 'Target platform for deployment (ocp4, cloudrun, gke)'
+        required: true
+        default: 'ocp4' # This input is not used in the reusable workflow but can be useful for future extensions
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/python-cd.yaml
+    with:
+      environment: ${{ github.event.inputs.environment }}
+      target-platform: ${{ github.event.inputs.target-platform }}
+      image-tag: ${{ github.event.inputs.image-tag }}
+      application-name: ${{ github.event.inputs.application-name }}
+      artifactory-url: ${{ github.event.inputs.artifactory-url }}
+    secrets:
+      OCP4_KUBECONFIG: ${{ secrets.OCP4_KUBECONFIG }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+      ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
